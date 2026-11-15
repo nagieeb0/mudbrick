@@ -1,12 +1,15 @@
 defmodule Mudbrick.Document do
   @type t :: %__MODULE__{
           compress: boolean(),
-          objects: list()
+          objects: list(),
+          pdf_version: String.t()
         }
 
   defstruct compress: false,
-            objects: []
+            objects: [],
+            pdf_version: "2.0"
 
+  alias Mudbrick.Attachment
   alias Mudbrick.Catalog
   alias Mudbrick.Document
   alias Mudbrick.Font
@@ -26,6 +29,9 @@ defmodule Mudbrick.Document do
           | {:modify_date, DateTime.t()}
           | {:title, String.t()}
           | {:creators, list(String.t())}
+          | {:pdfa, 3}
+          | {:output_intent, binary()}
+          | {:attachments, list(Mudbrick.Attachment.t() | keyword())}
 
   @type options :: [option()]
 
@@ -33,21 +39,27 @@ defmodule Mudbrick.Document do
   @spec new(options()) :: t()
   def new(opts) do
     compress = Keyword.get(opts, :compress, false)
+    pdfa = Keyword.get(opts, :pdfa)
 
     {doc, font_objects} =
       Font.add_objects(
-        %Document{compress: compress},
+        %Document{compress: compress, pdf_version: pdf_version(pdfa)},
         Keyword.get(opts, :fonts, [])
       )
 
     {doc, image_objects} =
       Image.add_objects(doc, Keyword.get(opts, :images, []))
 
+    {doc, attachments} = Attachment.add_objects(doc, Keyword.get(opts, :attachments, []))
+    {doc, output_intent} = add_output_intent(doc, Keyword.get(opts, :output_intent))
+
     doc
     |> add([
       PageTree.new(fonts: font_objects, images: image_objects),
       Stream.new(
-        compress: compress,
+        # PDF/A forbids a filter on the metadata stream: it must stay readable
+        # by tools that know nothing of PDF.
+        compress: compress and is_nil(pdfa),
         data: Metadata.render(opts),
         additional_entries: %{
           Type: :Metadata,
@@ -56,9 +68,34 @@ defmodule Mudbrick.Document do
       )
     ])
     |> add(fn [page_tree, metadata] ->
-      Catalog.new(page_tree: page_tree, metadata: metadata)
+      Catalog.new(
+        page_tree: page_tree,
+        metadata: metadata,
+        attachments: attachments,
+        output_intent: output_intent
+      )
     end)
     |> finish()
+  end
+
+  # PDF/A-3 is defined on ISO 32000-1, so its header must say 1.x.
+  defp pdf_version(nil), do: "2.0"
+  defp pdf_version(3), do: "1.7"
+
+  defp add_output_intent(doc, nil), do: {doc, nil}
+
+  defp add_output_intent(doc, icc_profile) when is_binary(icc_profile) do
+    doc
+    |> add(Stream.new(compress: doc.compress, data: icc_profile, additional_entries: %{N: 3}))
+    |> add(fn profile ->
+      %{
+        Type: :OutputIntent,
+        S: :GTS_PDFA1,
+        OutputConditionIdentifier: "sRGB IEC61966-2.1",
+        Info: "sRGB IEC61966-2.1",
+        DestOutputProfile: profile.ref
+      }
+    end)
   end
 
   @doc false

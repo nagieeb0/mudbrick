@@ -9,8 +9,25 @@ defmodule Mudbrick.PageTree do
     struct!(__MODULE__, opts)
   end
 
+  @doc false
   def add_page_ref(tree, ref) do
     %{tree | kids: tree.kids ++ [ref]}
+  end
+
+  # The Resources dictionary, shared by the tree and repeated on every page:
+  # PDF/A forbids a content stream from relying on inherited resources.
+  @doc false
+  def resources(tree) do
+    %{
+      Font: resource_dictionary(tree.fonts),
+      XObject: resource_dictionary(tree.images)
+    }
+  end
+
+  defp resource_dictionary(resources) do
+    for {_human_identifier, object} <- resources, into: %{} do
+      {object.value.resource_identifier, object.ref}
+    end
   end
 
   defimpl Mudbrick.Object do
@@ -19,17 +36,8 @@ defmodule Mudbrick.PageTree do
         Type: :Pages,
         Kids: page_tree.kids,
         Count: length(page_tree.kids),
-        Resources: %{
-          Font: resource_dictionary(page_tree.fonts),
-          XObject: resource_dictionary(page_tree.images)
-        }
+        Resources: Mudbrick.PageTree.resources(page_tree)
       })
-    end
-
-    defp resource_dictionary(resources) do
-      for {_human_identifier, object} <- resources, into: %{} do
-        {object.value.resource_identifier, object.ref}
-      end
     end
   end
 end

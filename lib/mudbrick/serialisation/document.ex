@@ -6,14 +6,19 @@ defimpl Mudbrick.Object, for: Mudbrick.Document do
   alias Mudbrick.Object
 
   def to_iodata(%Document{objects: raw_objects} = doc) do
-    header = "%PDF-2.0\n%����"
+    header = ["%PDF-", doc.pdf_version, "\n%", <<0xE2, 0xE3, 0xCF, 0xD3>>]
     objects = raw_objects |> Enum.reverse() |> Enum.map(&Object.to_iodata/1)
     sections = [header | objects]
+
+    # A file identifier is mandatory in PDF/A and harmless elsewhere; deriving
+    # it from the content keeps output deterministic.
+    id = :md5 |> :crypto.hash(objects) |> Base.encode16()
 
     trailer =
       Object.to_iodata(%{
         Size: length(objects) + 1,
-        Root: Document.catalog(doc).ref
+        Root: Document.catalog(doc).ref,
+        ID: [id, id]
       })
 
     [

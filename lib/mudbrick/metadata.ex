@@ -35,7 +35,7 @@ defmodule Mudbrick.Metadata do
               <rdf:Alt>
                 <rdf:li xml:lang="x-default">\
       """,
-      Keyword.fetch!(opts, :title),
+      xml_escape(Keyword.fetch!(opts, :title)),
       """
       </rdf:li>
               </rdf:Alt>
@@ -56,10 +56,31 @@ defmodule Mudbrick.Metadata do
       """
       </xmpMM:InstanceID>
           </rdf:Description>
+      """,
+      pdfa_identification(opts[:pdfa]),
+      """
         </rdf:RDF>
       </x:xmpmeta>
 
       <?xpacket end="w"?>\
+      """
+    ]
+  end
+
+  # PDF/A conformance claim; B is the visual-appearance level.
+  defp pdfa_identification(nil), do: ""
+
+  defp pdfa_identification(part) do
+    [
+      """
+          <rdf:Description rdf:about="" xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/">
+            <pdfaid:part>\
+      """,
+      Integer.to_string(part),
+      """
+      </pdfaid:part>
+            <pdfaid:conformance>B</pdfaid:conformance>
+          </rdf:Description>
       """
     ]
   end
@@ -79,6 +100,13 @@ defmodule Mudbrick.Metadata do
       </dc:creator>
       """
     ]
+  end
+
+  defp xml_escape(text) do
+    text
+    |> String.replace("&", "&amp;")
+    |> String.replace("<", "&lt;")
+    |> String.replace(">", "&gt;")
   end
 
   defp date(_, nil), do: ""

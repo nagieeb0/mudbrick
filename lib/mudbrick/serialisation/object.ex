@@ -32,7 +32,9 @@ defimpl Mudbrick.Object, for: Atom do
     |> Enum.flat_map(&escape_char/1)
   end
 
-  defp escape_char(char) when char not in ?!..?~ do
+  # Delimiters must be escaped too, or a MIME type such as text/xml would end
+  # the name at its slash.
+  defp escape_char(char) when char not in ?!..?~ or char in ~c"/()<>[]{}%#" do
     "##{Base.encode16(to_string([char]))}" |> String.to_charlist()
   end
 

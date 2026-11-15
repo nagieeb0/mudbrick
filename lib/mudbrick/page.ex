@@ -7,6 +7,7 @@ defmodule Mudbrick.Page do
 
   defstruct contents: nil,
             parent: nil,
+            resources: nil,
             size: nil
 
   alias Mudbrick.Document
@@ -59,7 +60,12 @@ defmodule Mudbrick.Page do
   end
 
   defp new_at_root(opts, doc) do
-    Keyword.put(opts, :parent, Document.root_page_tree(doc).ref) |> new()
+    tree = Document.root_page_tree(doc)
+
+    opts
+    |> Keyword.put(:parent, tree.ref)
+    |> Keyword.put(:resources, Mudbrick.PageTree.resources(tree.value))
+    |> new()
   end
 
   defp add_to_page_tree({doc, page}) do
@@ -81,6 +87,7 @@ defmodule Mudbrick.Page do
           Parent: page.parent,
           MediaBox: [0, 0, width, height]
         }
+        |> Map.merge(if page.resources, do: %{Resources: page.resources}, else: %{})
         |> Map.merge(
           case page.contents do
             nil -> %{}
